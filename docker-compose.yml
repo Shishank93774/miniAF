@@ -3,6 +3,8 @@ services:
     image: postgres:18
     container_name: mini_airflow_postgres
     env_file: .env
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
     ports:
       - "5432:5432"
     volumes:
@@ -15,7 +17,9 @@ services:
       - "6379:6379"
 
   api:
-    build: ./api
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
     container_name: mini_airflow_api
     env_file: .env
     ports:
@@ -25,7 +29,9 @@ services:
       - redis
 
   scheduler:
-    build: ./scheduler
+    build:
+      context: .
+      dockerfile: docker/scheduler.Dockerfile
     container_name: mini_airflow_scheduler
     env_file: .env
     depends_on:
@@ -33,7 +39,9 @@ services:
       - redis
 
   worker:
-    build: ./worker
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
     container_name: mini_airflow_worker
     env_file: .env
     depends_on:
