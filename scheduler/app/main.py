@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError, ProgrammingError
 from croniter import croniter
 from datetime import datetime, timezone
 
+UTC = timezone.utc
 
 def add_job_run_to_db(db, job_id, scheduled_time):
     job_run = JobRun(job_id=job_id, scheduled_time=scheduled_time, status=JobRunStatus.PENDING, attempt_number=0)
@@ -46,9 +47,9 @@ while True:
             else:
                 base_run_time = last_run_job.scheduled_time
             next_run_time = croniter(job.schedule, base_run_time).get_next(datetime)
-            next_run_time_utc = next_run_time.astimezone(timezone.utc)
+            next_run_time_utc = next_run_time.astimezone(UTC)
 
-            if next_run_time_utc <= datetime.now(tz=timezone.utc):
+            if next_run_time_utc <= datetime.now(tz=UTC):
                 print("Job:", job.name, "\nNext Run:", next_run_time, "is due.")
                 add_job_run_to_db(db, job.id, next_run_time)
             else:
