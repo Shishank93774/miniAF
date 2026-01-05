@@ -1,10 +1,11 @@
 import enum
 from sqlalchemy import (
-    Column, Integer, String, Boolean, DateTime,
+    Column, Integer, Float, String, Boolean, DateTime,
     Enum, ForeignKey, JSON, UniqueConstraint
 )
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+from sqlalchemy import text
 
 from .base import Base
 
@@ -25,12 +26,12 @@ class Job(Base):
     schedule = Column(String, nullable=False)
 
     execution_time_sec = Column(Integer, nullable=False)
-    failure_probability = Column(Integer, nullable=False)
+    failure_probability = Column(Float, nullable=False)
 
-    max_retries = Column(Integer, default=0)
-    retry_delay_sec = Column(Integer, default=5)
+    max_retries = Column(Integer, default=0, server_default=text("0"))
+    retry_delay_sec = Column(Integer, default=5, server_default=text("5"))
 
-    is_active = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=True, server_default=text("true"))
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(
@@ -40,6 +41,8 @@ class Job(Base):
     )
 
     runs = relationship("JobRun", back_populates="job")
+
+    __repr__ = lambda self: f"Job(id={self.id}, name={self.name}, schedule={self.schedule}, execution_time_sec={self.execution_time_sec}, failure_probability={self.failure_probability}, max_retries={self.max_retries}, retry_delay_sec={self.retry_delay_sec}, is_active={self.is_active}, created_at={self.created_at}, updated_at={self.updated_at})"
 
 
 class JobRun(Base):
@@ -53,7 +56,7 @@ class JobRun(Base):
 
     status = Column(Enum(JobRunStatus), nullable=False)
 
-    attempt_number = Column(Integer, default=0)
+    attempt_number = Column(Integer, default=0, server_default=text("0"))
 
     started_at = Column(DateTime(timezone=True))
     finished_at = Column(DateTime(timezone=True))
@@ -68,3 +71,5 @@ class JobRun(Base):
     __table_args__ = (
         UniqueConstraint("job_id", "scheduled_time", name="uq_job_schedule"),
     )
+
+    __repr__ = lambda self: f"JobRun(id={self.id}, job_id={self.job_id}, scheduled_time={self.scheduled_time}, status={self.status}, attempt_number={self.attempt_number}, started_at={self.started_at}, finished_at={self.finished_at}, error_message={self.error_message}, worker_id={self.worker_id}, created_at={self.created_at})"

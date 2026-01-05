@@ -13,5 +13,5 @@ DATABASE_URL = (
     f"@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 )
 
-engine = create_engine(DATABASE_URL, echo=True)
+engine = create_engine(DATABASE_URL, echo=False)
 SessionLocal = sessionmaker(bind=engine)
