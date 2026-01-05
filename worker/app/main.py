@@ -6,11 +6,21 @@ from datetime import datetime, timezone, timedelta
 from common.db.session import SessionLocal
 from common.db.models import Job, JobRun, JobRunStatus
 from common.db.utils import wait_for_db
-from sqlalchemy import select, or_, text
+from sqlalchemy import select
 from sqlalchemy.exc import ProgrammingError
 
 UTC = timezone.utc
-WORKER_ID = os.getenv("WORKER_ID", "worker-1")
+
+def get_worker_id():
+    # Docker sets HOSTNAME automatically
+    hostname = os.getenv("HOSTNAME")
+    if hostname:
+        return hostname
+
+    # Local fallback
+    return os.getenv("WORKER_ID", "local-worker")
+
+WORKER_ID = get_worker_id()
 TIME_TO_WAIT_SEC = 1
 
 class JobFailureRandomException(Exception):

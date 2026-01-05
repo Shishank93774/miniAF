@@ -1,7 +1,7 @@
 import enum
 from sqlalchemy import (
     Column, Integer, Float, String, Boolean, DateTime,
-    Enum, ForeignKey, JSON, UniqueConstraint
+    Enum, ForeignKey, JSON, UniqueConstraint, CheckConstraint
 )
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -41,6 +41,13 @@ class Job(Base):
     )
 
     runs = relationship("JobRun", back_populates="job")
+
+    __table_args__ = (
+        CheckConstraint("max_retries >= 0", name="ck_job_max_retries"),
+        CheckConstraint("retry_delay_sec >= 0", name="ck_job_retry_delay_sec"),
+        CheckConstraint("execution_time_sec >= 0", name="ck_job_execution_time_sec"),
+        CheckConstraint("failure_probability >= 0 and failure_probability <= 1", name="ck_job_failure_probability")
+    )
 
     __repr__ = lambda self: f"Job(id={self.id}, name={self.name}, schedule={self.schedule}, execution_time_sec={self.execution_time_sec}, failure_probability={self.failure_probability}, max_retries={self.max_retries}, retry_delay_sec={self.retry_delay_sec}, is_active={self.is_active}, created_at={self.created_at}, updated_at={self.updated_at})"
 
