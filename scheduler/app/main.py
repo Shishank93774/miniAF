@@ -1,10 +1,12 @@
 import time
 from common.db.session import SessionLocal
 from common.db.models import Job, JobRun, JobRunStatus
+from common.db.utils import wait_for_db
 from sqlalchemy import select, desc
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, ProgrammingError
 from croniter import croniter
 from datetime import datetime, timezone
+
 
 def add_job_run_to_db(db, job_id, scheduled_time):
     job_run = JobRun(job_id=job_id, scheduled_time=scheduled_time, status=JobRunStatus.PENDING, attempt_number=0)
@@ -17,8 +19,17 @@ def add_job_run_to_db(db, job_id, scheduled_time):
         print(f"Error adding job run to database: {e}")
 
 
+wait_for_db()
 while True:
     db = SessionLocal()
+
+    try:
+        jobs = db.execute(select(Job).where(Job.is_active == True)).scalars().all()
+    except ProgrammingError as e:
+        print("DB schema not ready yet, retrying...")
+        db.rollback()
+        time.sleep(5)
+        continue
 
     try:
         query = select(Job).where(Job.is_active == True)
@@ -38,13 +49,8 @@ while True:
             next_run_time_utc = next_run_time.astimezone(timezone.utc)
 
             if next_run_time_utc <= datetime.now(tz=timezone.utc):
-                check_query = select(JobRun).where(
-                    (JobRun.job_id == job.id) & (JobRun.scheduled_time == next_run_time))
-                check_result = db.execute(check_query).scalar_one_or_none()
-
-                if check_result is None:
-                    print("Job:", job.name, "\nNext Run:", next_run_time, "is due.")
-                    add_job_run_to_db(db, job.id, next_run_time)
+                print("Job:", job.name, "\nNext Run:", next_run_time, "is due.")
+                add_job_run_to_db(db, job.id, next_run_time)
             else:
                 print("Job:", job.name, "\nNext Run:", next_run_time, "is not due.")
 

@@ -5,7 +5,9 @@ WORKDIR /app
 COPY common /app/common
 COPY worker/app /app
 
-RUN pip install fastapi uvicorn sqlalchemy psycopg[binary]
+# Install dependencies
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir -r requirements.txt
 
 ENV PYTHONPATH=/app
 
