@@ -67,6 +67,7 @@ class JobRun(Base):
 
     started_at = Column(DateTime(timezone=True))
     finished_at = Column(DateTime(timezone=True))
+    last_heartbeat_at = Column(DateTime(timezone=True))
 
     error_message = Column(String)
     worker_id = Column(String)

@@ -1,63 +1,103 @@
 import time
+from datetime import datetime, timezone, timedelta
+
+from sqlalchemy import select, desc
+from sqlalchemy.exc import IntegrityError, ProgrammingError
+
+from croniter import croniter
+
 from common.db.session import SessionLocal
 from common.db.models import Job, JobRun, JobRunStatus
 from common.db.utils import wait_for_db
-from sqlalchemy import select, desc
-from sqlalchemy.exc import IntegrityError, ProgrammingError
-from croniter import croniter
-from datetime import datetime, timezone
 
 UTC = timezone.utc
+ZOMBIE_TIMEOUT_SEC = 30
+SCHEDULER_INTERVAL_SEC = 10
 
-def add_job_run_to_db(db, job_id, scheduled_time):
-    job_run = JobRun(job_id=job_id, scheduled_time=scheduled_time, status=JobRunStatus.PENDING, attempt_number=0)
+
+def add_job_run(db, job_id, scheduled_time):
+    job_run = JobRun(
+        job_id=job_id,
+        scheduled_time=scheduled_time,
+        status=JobRunStatus.PENDING,
+        attempt_number=0,
+    )
     try:
         db.add(job_run)
         db.commit()
     except IntegrityError:
         db.rollback()
-    except Exception as e:
-        print(f"Error adding job run to database: {e}")
 
 
 wait_for_db()
+print("[scheduler] Started")
+
 while True:
     db = SessionLocal()
-
     try:
-        jobs = db.execute(select(Job).where(Job.is_active == True)).scalars().all()
-    except ProgrammingError as e:
-        print("DB schema not ready yet, retrying...")
-        db.rollback()
-        time.sleep(5)
-        continue
+        now = datetime.now(UTC)
 
-    try:
-        query = select(Job).where(Job.is_active == True)
-        result = db.execute(query)
+        # 1. Zombie detection
+        zombie_runs = (
+            db.execute(
+                select(JobRun)
+                .where(
+                    JobRun.status == JobRunStatus.RUNNING,
+                    JobRun.last_heartbeat_at
+                    < now - timedelta(seconds=ZOMBIE_TIMEOUT_SEC),
+                )
+                .with_for_update(skip_locked=True)
+            )
+            .scalars()
+            .all()
+        )
 
-        jobs = result.scalars().all()
-        print("Printing Jobs:")
+        for jr in zombie_runs:
+            job = db.execute(
+                select(Job).where(Job.id == jr.job_id)
+            ).scalar_one()
+
+            jr.attempt_number += 1
+            jr.finished_at = now
+            jr.worker_id = None
+
+            if jr.attempt_number <= job.max_retries:
+                jr.status = JobRunStatus.RETRY
+                jr.scheduled_time = now + timedelta(
+                    seconds=job.retry_delay_sec
+                )
+                print(f"[scheduler] Zombie RETRY job_run={jr.id}")
+            else:
+                jr.status = JobRunStatus.FAILED
+                print(f"[scheduler] Zombie FAILED job_run={jr.id}")
+
+        db.commit()
+
+        # 2. Cron scheduling
+        jobs = db.execute(
+            select(Job).where(Job.is_active == True)
+        ).scalars().all()
+
         for job in jobs:
-            last_run_query = select(JobRun).where(JobRun.job_id == job.id).order_by(desc(JobRun.scheduled_time)).limit(1)
-            last_run_job = db.execute(last_run_query).scalar_one_or_none()
+            last_run = db.execute(
+                select(JobRun)
+                .where(JobRun.job_id == job.id)
+                .order_by(desc(JobRun.scheduled_time))
+                .limit(1)
+            ).scalar_one_or_none()
 
-            if last_run_job is None:
-                base_run_time = job.created_at
-            else:
-                base_run_time = last_run_job.scheduled_time
-            next_run_time = croniter(job.schedule, base_run_time).get_next(datetime)
-            next_run_time_utc = next_run_time.astimezone(UTC)
+            base_time = last_run.scheduled_time if last_run else job.created_at
+            next_run = croniter(job.schedule, base_time).get_next(datetime)
+            next_run = next_run.astimezone(UTC)
 
-            if next_run_time_utc <= datetime.now(tz=UTC):
-                print("Job:", job.name, "\nNext Run:", next_run_time, "is due.")
-                add_job_run_to_db(db, job.id, next_run_time)
-            else:
-                print("Job:", job.name, "\nNext Run:", next_run_time, "is not due.")
+            if next_run <= now:
+                add_job_run(db, job.id, next_run)
+                print(f"[scheduler] Scheduled {job.name}")
 
-    except Exception as e:
-        print(f"Error connecting to database: {e}")
+    except ProgrammingError:
+        db.rollback()
+        time.sleep(3)
     finally:
         db.close()
 
-    time.sleep(10)
+    time.sleep(SCHEDULER_INTERVAL_SEC)

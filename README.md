@@ -158,34 +158,108 @@ This led to understanding:
 
 ---
 
-## Phase 5 — Reliability, Leases & Failure Detection (Design Phase)
+## Phase 5 — Reliability, Leases & Failure Detection
 
-**Status:** 🔄 In progress (design-first)
+**Status:** ✅ Done (design-first)
 
-### Problems to Solve
-- Worker crashes mid-execution
-- Infinite RUNNING jobs
-- Long-running jobs vs stuck jobs
-- Safe job recovery
+**Implemented:**
+- Scheduler
+- Workers (scalable)
+- Atomic job claiming
+- Retries with delay
+- Heartbeat mechanism
+- Zombie job reaper
+- Dockerized setup
 
-### Core Insight
-> **RUNNING is a lease, not a permanent state**
+---
 
-### Planned Mechanism
-- `last_heartbeat_at` column
-- Workers periodically heartbeat
-- Scheduler (or reaper) detects expired leases
-- Jobs reclaimed or failed based on policy
+## Atomic Job Claiming
 
-### Explicitly NOT Doing
-- Long-lived DB transactions
-- Relying on locks for execution lifetime
+Workers claim jobs using PostgreSQL row locks:
 
-### Design Principles
-- Short transactions
-- Explicit liveness checks
-- Idempotent recovery
-- DB as the single source of truth
+```sql
+SELECT *
+FROM job_runs
+WHERE status IN ('PENDING', 'RETRY')
+  AND scheduled_time <= now()
+ORDER BY scheduled_time
+FOR UPDATE SKIP LOCKED
+LIMIT 1;
+```
+
+Only **Postgres decides the winner**, preventing race conditions.
+
+---
+
+## Heartbeat System ❤️
+
+Workers periodically update:
+
+```
+job_run.last_heartbeat_at = now()
+```
+
+This happens while the job is executing.
+
+---
+
+## Zombie Job Reaper 🧟‍♂️
+
+Scheduler detects jobs stuck in RUNNING:
+
+```
+status = RUNNING
+AND last_heartbeat_at < now() - HEARTBEAT_TIMEOUT
+```
+
+Action taken:
+- Retry if attempts left
+- Else mark FAILED
+
+---
+
+## Retry Strategy
+
+- Same job_run reused
+- scheduled_time updated
+- attempt_number incremented
+- No new rows created
+
+---
+
+## Failure Scenarios Covered
+
+- Worker crash
+- Worker kill
+- Multiple workers racing
+- Stuck RUNNING jobs
+- Duplicate execution prevention
+
+---
+
+## Docker
+
+Scale workers:
+```bash
+docker-compose up --scale worker=2
+```
+
+---
+
+## Philosophy
+
+- Database > Application for coordination
+- Crashes are normal
+- Recovery must be automatic
+
+---
+
+## Next Steps
+
+- Metrics & monitoring
+- Watchdog service
+- Graceful shutdown
+- DAG support
 
 ---
 
@@ -206,10 +280,8 @@ This **is** about:
 
 ## Next Planned Phases
 
-- Phase 5A: Lease expiry & heartbeat
-- Phase 5B: Atomic job claiming with `SELECT ... FOR UPDATE SKIP LOCKED`
-- Phase 6: Redis-based queue (optional)
-- Phase 7: Metrics & observability
+- Phase 6: Metrics & observability
+- Phase 7: Redis-based queue (optional)
 - Phase 8: Graceful shutdown & recovery
 
 ---
