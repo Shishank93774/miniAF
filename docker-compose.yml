@@ -27,6 +27,8 @@ services:
     depends_on:
       - postgres
       - redis
+    volumes:
+      - ./logs:/app/logs
 
   scheduler:
     build:
@@ -37,6 +39,8 @@ services:
     depends_on:
       - postgres
       - redis
+    volumes:
+      - ./logs:/app/logs
 
   worker:
     build:
@@ -46,6 +50,8 @@ services:
     depends_on:
       - postgres
       - redis
+    volumes:
+      - ./logs:/app/logs
 
 volumes:
   postgres_data:

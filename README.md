@@ -236,6 +236,43 @@ Action taken:
 - Duplicate execution prevention
 
 ---
+## Phase 6: Metrics & observability
+
+**Goal:** Make the system observable and debuggable under concurrent, distributed execution.
+
+### Implemented:
+- Structured JSON logging across:
+  - API
+  - Scheduler
+  - Workers
+
+### Logged key lifecycle events:
+  - Scheduler startup
+  - Job scheduling
+  - Job claiming
+  - Job execution start 
+  - Heartbeats 
+  - Job success / retry / failure 
+
+### Periodic cluster state logs from scheduler:
+  - Active worker count 
+  - Running job count 
+
+### Heartbeat emission from workers while executing jobs 
+
+### Important Design Decisions
+- Logs are append-only and immutable
+- Logging is non-blocking and does not affect execution flow 
+- No external log aggregator yet (stdout-first design)
+- Scheduler observes system state via DB + logs, not worker RPCs
+
+### Observations
+- Structured logs make distributed flows traceable 
+- Heartbeats are essential for detecting stalled or zombie executions 
+- Observability must be built before scaling workers 
+- Logs double as both debugging tool and future metrics source
+
+---
 
 ## Docker
 
@@ -280,9 +317,7 @@ This **is** about:
 
 ## Next Planned Phases
 
-- Phase 6: Metrics & observability
-- Phase 7: Redis-based queue (optional)
-- Phase 8: Graceful shutdown & recovery
+- Phase 7: Redis-based queue
 
 ---
 
