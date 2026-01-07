@@ -317,7 +317,8 @@ This **is** about:
 
 ## Next Planned Phases
 
-- Phase 7: Redis-based queue
+- Phase 7A: Deploy this project
+- Phase 7B: Redis-based queue
 
 ---
 
